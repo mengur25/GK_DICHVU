@@ -1,20 +1,24 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from database import Base, engine, SessionLocal
-import models
-from models import User, RoleEnum
-from security import get_password_hash
-from routers import auth, users, students, courses, enrollments, invoices, payments, service_accounts
+from .database import Base, engine, SessionLocal
+from . import models
+from .models import User, RoleEnum
+from .security import get_password_hash
+from .routers import auth, users, students, courses, enrollments, invoices, payments, vnpay
 
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="University Tuition Payment API")
+app = FastAPI(title="University Payment API")
 
 origins = [
     "http://localhost:8000",
-    "http://127.0.0.1:8000"
+    "http://127.0.0.1:8000",
+    "http://localhost:5173",      
+    "http://127.0.0.1:5173",
+    "http://myapp.vn:5173",
 ]
+
 
 def create_admin():
     db: Session = SessionLocal()
@@ -51,7 +55,7 @@ app.include_router(courses.router)
 app.include_router(enrollments.router)
 app.include_router(invoices.router)
 app.include_router(payments.router)
-app.include_router(service_accounts.router)
+app.include_router(vnpay.router)
 
 @app.get("/")
 def root():

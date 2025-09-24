@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session, joinedload
-import schemas
-import models
-from deps import get_db, require_roles
-from models import RoleEnum
+from .. import schemas, models
+from ..deps import get_db, require_roles
+from ..models import RoleEnum
 from typing import List
 router = APIRouter(prefix="/users", tags=["Users"])
 

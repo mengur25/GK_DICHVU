@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-import schemas
-import models
-from deps import get_db, require_roles, get_current_user
-from models import RoleEnum
-from security import get_password_hash
+from sqlalchemy.orm import Session, joinedload
+from .. import schemas, models
+from ..deps import get_db, require_roles, get_current_user
+from ..models import RoleEnum
+from ..security import get_password_hash
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
@@ -58,40 +57,36 @@ def create_student(
 @router.get("/", response_model=list[schemas.StudentOut])
 def list_students(db: Session = Depends(get_db),
                   _: models.User = Depends(require_roles(RoleEnum.admin))):
-    return db.query(models.Student).all()
+    students = db.query(models.Student).options(joinedload(models.Student.service_account)).all()
+    return students
+
+
 
 @router.get("/profile", response_model=schemas.StudentOut)
-def get_current_student(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if current_user.role != RoleEnum.student:
-        raise HTTPException(status_code=403, detail="Not a student")
+def get_my_profile(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # only students have profile
+    role_name = getattr(current_user.role, "name", str(current_user.role)).lower()
+    if role_name != RoleEnum.student.name:
+        raise HTTPException(status_code=403, detail="Only students can access this endpoint")
+
     student = db.query(models.Student).filter(models.Student.user_id == current_user.id).first()
     if not student:
-        raise HTTPException(status_code=404, detail="Student not found")
-    
-    # Load balance from service account
-    service_account = db.query(models.ServiceAccount).filter(models.ServiceAccount.student_id == student.id).first()
-    if service_account:
-        student.balance = service_account.balance
-    else:
-        student.balance = 0
-    
-    return student 
+        raise HTTPException(status_code=404, detail="Student profile not found")
 
-@router.get("/by-code/{student_code}", response_model=schemas.StudentOut)
-def get_student_by_code(student_code: str, db: Session = Depends(get_db),
-                        _: models.User = Depends(require_roles(RoleEnum.admin, RoleEnum.student))):
-    st = db.query(models.Student).filter(models.Student.student_code == student_code).first()
+    account = db.query(models.ServiceAccount).filter(models.ServiceAccount.student_id == student.id).first()
+    student.balance = getattr(account, "balance", 0)
+    return student
+
+@router.get("/by-code/{code}", response_model=schemas.StudentOut)
+def get_student_by_code(code: str, db: Session = Depends(get_db), _: models.User = Depends(require_roles(RoleEnum.admin, RoleEnum.student))):
+    st = db.query(models.Student).filter(models.Student.student_code == code).first()
     if not st:
-        raise HTTPException(404, "Student not found")
-    
-    # Load balance from service account
-    service_account = db.query(models.ServiceAccount).filter(models.ServiceAccount.student_id == st.id).first()
-    if service_account:
-        st.balance = service_account.balance
-    else:
-        st.balance = 0
-    
+        raise HTTPException(status_code=404, detail="Student not found")
+    account = db.query(models.ServiceAccount).filter(models.ServiceAccount.student_id == st.id).first()
+    st.balance = getattr(account, "balance", 0)
     return st
+
+
 
 @router.get("/{student_id}", response_model=schemas.StudentOut)
 def get_student(student_id: int, db: Session = Depends(get_db),
@@ -99,15 +94,9 @@ def get_student(student_id: int, db: Session = Depends(get_db),
     st = db.query(models.Student).get(student_id)
     if not st:
         raise HTTPException(404, "Student not found")
-    
-    # Load balance from service account
-    service_account = db.query(models.ServiceAccount).filter(models.ServiceAccount.student_id == st.id).first()
-    if service_account:
-        st.balance = service_account.balance
-    else:
-        st.balance = 0
-    
     return st
+
+
 
 @router.put("/{student_id}", response_model=schemas.StudentOut)
 def update_student(

@@ -1,15 +1,17 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, List, Literal
-from models import RoleEnum, InvoiceStatus, PaymentMethod
+from .models import RoleEnum, InvoiceStatus, PaymentMethod
 
 # -------- Auth --------
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    role: RoleEnum | str
+    email: EmailStr
 
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 # -------- Student --------
@@ -25,6 +27,15 @@ class StudentUpdate(BaseModel):
     department: Optional[str] = None  
     phone: Optional[str] = None  
 
+# -------- Service Accounts ------
+class ServiceAccountOut(BaseModel):
+    id: int
+    student_id: int
+    balance: float
+
+    class Config:
+        orm_mode = True
+
 class StudentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -32,7 +43,7 @@ class StudentOut(BaseModel):
     full_name: str
     department: Optional[str]
     phone: Optional[str]
-    balance: Optional[float] = None
+    service_account: Optional[ServiceAccountOut] = None  
     is_active: Optional[bool] = True
     user_id: Optional[int]
 
@@ -130,10 +141,21 @@ class PaymentOut(BaseModel):
     method: PaymentMethod
     transaction_code: str
 
-# -------- Service Accounts ------
-class ServiceAccountOut(BaseModel):
-    id: int
+
+
+class RecentPaymentItem(BaseModel):
+    invoice_id: int
     student_id: int
-    balance: float
+    student_name: Optional[str] = None
+    amount: int
+    paid_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class PaymentHistorySummary(BaseModel):
+    total_paid_invoices: int
+    total_amount: int
+    unique_payers: int
+    recent_payments: List[RecentPaymentItem] = []
 
     model_config = ConfigDict(from_attributes=True)

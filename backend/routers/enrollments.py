@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-import schemas
-import models
-from deps import get_db, require_roles
-from models import RoleEnum
+from .. import schemas, models
+from ..deps import get_db, require_roles
+from ..models import RoleEnum
 
 router = APIRouter(prefix="/enrollments", tags=["Enrollments"])
 

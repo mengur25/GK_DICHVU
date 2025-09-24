@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-import schemas
-import models
-from deps import get_db, require_roles
-from models import RoleEnum
+from .. import schemas, models
+from ..deps import get_db, require_roles
+from ..models import RoleEnum
 from sqlalchemy import func
 
 router = APIRouter(prefix="/courses", tags=["Courses"])

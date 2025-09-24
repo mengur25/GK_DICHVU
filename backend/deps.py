@@ -2,9 +2,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import jwt, JWTError
-from database import SessionLocal
-from models import User, RoleEnum
-from security import SECRET_KEY, ALGORITHM
+from .database import SessionLocal
+from .models import User, RoleEnum
+from .security import SECRET_KEY, ALGORITHM
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 # from sqlalchemy import text
@@ -47,7 +47,29 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 
 def require_roles(*roles: RoleEnum):
     def checker(current_user: User = Depends(get_current_user)):
-        if current_user.role not in roles:
-            raise HTTPException(status_code=403, detail="Not enough permissions")
+        print("require_roles: raw role:", current_user.role, "type:", type(current_user.role))
+
+        if isinstance(current_user.role, RoleEnum):
+            user_role_name = current_user.role.name
+            user_role_value = current_user.role.value
+        else:
+            user_role_name = str(current_user.role)
+            user_role_value = str(current_user.role)
+
+        allowed = set()
+        for r in roles:
+            if isinstance(r, RoleEnum):
+                allowed.add(r.name)
+                allowed.add(str(r.value))
+            else:
+                allowed.add(str(r))
+
+        if (str(user_role_name) not in allowed) and (str(user_role_value) not in allowed):
+            print("require_roles: denied. user_role_name:", user_role_name, "user_role_value:", user_role_value, "allowed:", allowed)
+            raise HTTPException(status_code=403, detail="Not enough permission")
+
+        print("require_roles: allowed. user_role_name:", user_role_name, "user_role_value:", user_role_value)
         return current_user
+
     return checker
+

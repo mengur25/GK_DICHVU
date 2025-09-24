@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, Date, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Boolean, Float, Date, ForeignKey, Enum, DateTime
 from sqlalchemy.orm import relationship
 from enum import Enum as PyEnum
-from database import Base
+from .database import Base
+from datetime import datetime
 
 # Enum cho role người dùng
 class RoleEnum(str, PyEnum):
@@ -22,7 +23,7 @@ class InvoiceStatus(str, PyEnum):
 
 # Enum cho phương thức thanh toán
 class PaymentMethod(str, PyEnum):
-    cash = "cash"
+    service_account = "service_account"
     credit_card = "credit_card"
     bank_transfer = "bank_transfer"
 
@@ -86,13 +87,15 @@ class Payment(Base):
     __tablename__ = "payments"
     id = Column(Integer, primary_key=True, index=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=False)
+    payer_student_id = Column(Integer, ForeignKey("students.id"), nullable=False)
     payment_date = Column(Date, nullable=False)
     amount_paid = Column(Float, nullable=False)
     method = Column(Enum(PaymentMethod), nullable=False)
     transaction_code = Column(String, unique=True, nullable=False)
-    card_number = Column(String, nullable=True)  
 
     invoice = relationship("Invoice", back_populates="payments")
+    paid_at = Date
+    payer_student = relationship("Student", foreign_keys=[payer_student_id])
     @property
     def student_code(self):
         return self.invoice.student.student_code if self.invoice and self.invoice.student else ""
@@ -100,7 +103,7 @@ class Payment(Base):
     @property
     def student_name(self):
         return self.invoice.student.full_name if self.invoice and self.invoice.student else ""
-
+    
 class Invoice(Base):
     __tablename__ = "invoices"
     id = Column(Integer, primary_key=True, index=True)
@@ -108,6 +111,6 @@ class Invoice(Base):
     total_amount = Column(Float, nullable=False) 
     due_date = Column(Date, nullable=False)
     status = Column(Enum(InvoiceStatus), default=InvoiceStatus.unpaid, nullable=False)
-
+    paid_at = Column(DateTime, default=None)
     student = relationship("Student", back_populates="invoices")
     payments = relationship("Payment", back_populates="invoice", cascade="all, delete-orphan")
