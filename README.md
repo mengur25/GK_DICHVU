@@ -79,7 +79,6 @@ npm start
 
 - **Frontend**: http://localhost:3000
 - **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
 
 ## 👤 Tài khoản mặc định
 
@@ -88,8 +87,8 @@ npm start
 - **Password**: `admin123`
 
 ### Sinh viên
-- **Email**: `student1@test.com`
-- **Password**: `test123456`
+- **Email**: `52300001@test.com`
+- **Password**: `123456`
 
 ## 🛠️ Công nghệ sử dụng
 
