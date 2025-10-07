@@ -25,6 +25,7 @@ class InvoiceStatus(str, PyEnum):
 class PaymentMethod(str, PyEnum):
     service_account = "service_account"
     credit_card = "credit_card"
+    vnpay = "vnpay"
     bank_transfer = "bank_transfer"
 
 class User(Base):

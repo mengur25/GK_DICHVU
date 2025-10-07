@@ -77,7 +77,7 @@ def resend_otp(
     send_email(current_user.email, "New OTP for Payment", f"Your new OTP: {otp} (expires in 2 minutes)")
     return {"detail": "New OTP sent to email"}
 
-@router.post("/confirm", response_model=schemas.PaymentOut)
+@router.post("/confirm", response_model=dict)
 def confirm_payment(
     payload: schemas.PaymentCreate,
     otp: str = Query(...),
@@ -92,7 +92,7 @@ def confirm_payment(
         raise HTTPException(400, "OTP has expired")
     if otp != otp_data["otp"]:
         raise HTTPException(400, "Invalid OTP")
-    
+
     if payload.method not in (PaymentMethod.bank_transfer, PaymentMethod.service_account, PaymentMethod.credit_card):
         raise HTTPException(400, "Unsupported payment method")
 
@@ -118,39 +118,30 @@ def confirm_payment(
     requested_amount = payload.amount_paid
     if requested_amount <= 0:
         raise HTTPException(400, "Amount must be greater than 0")
-
     if requested_amount < due:
         raise HTTPException(400, "Amount must cover full invoice (no partial payments allowed)")
 
     pay_amount = due
     excess_amount = int(requested_amount - due) if requested_amount > due else 0
 
-    # Paying from ServiceAccount
+    # ======= Service Account =======
     if payload.method == PaymentMethod.service_account:
         if not payer_student.service_account:
             raise HTTPException(400, "No service account found for this student")
 
         available_balance = float(payer_student.service_account.balance or 0)
         requested = float(requested_amount)
-
-        # Kiểm tra số dư trước
         if requested > available_balance:
             raise HTTPException(400, "Insufficient balance in service account")
 
-        # Trừ số tiền thanh toán
         payer_student.service_account.balance = available_balance - requested
 
-        # Nếu trả dư thì cộng lại phần dư
-        if excess_amount > 0:
-            payer_student.service_account.balance += excess_amount
-    else:
-        # Thanh toán ngoài => cộng phần dư vào service account nếu có
+    elif payload.method in (PaymentMethod.credit_card):
         if excess_amount > 0:
             if not payer_student.service_account:
                 payer_student.service_account = models.ServiceAccount(balance=0)
                 db.add(payer_student.service_account)
             payer_student.service_account.balance = (payer_student.service_account.balance or 0) + excess_amount
-
 
     payment = models.Payment(
         invoice_id=invoice.id,
@@ -172,14 +163,31 @@ def confirm_payment(
         db.rollback()
         raise HTTPException(400, "Transaction failed")
 
-    send_email(current_user.email, "Payment Confirmation",
-               f"Payment successful for invoice {invoice.id}. Amount: {pay_amount}")
-    send_email(student.user.email, "Invoice Paid",
-               f"Your invoice has been paid.")
+    # Gửi email (nếu muốn)
+    try:
+        send_email(current_user.email, "Payment Confirmation",
+                   f"Payment successful for invoice {invoice.id}. Amount: {pay_amount}")
+        send_email(student.user.email, "Invoice Paid",
+                   f"Your invoice has been paid.")
+    except Exception as e:
+        print("Warning: failed to send email:", e)
 
     del global_otp_store[key]
 
-    return payment
+    # Trả về response
+    return {
+        "success": True,
+        "message": "Payment successful",
+        "payment": {
+            "id": payment.id,
+            "invoice_id": payment.invoice_id,
+            "payer_student_id": payment.payer_student_id,
+            "amount_paid": payment.amount_paid,
+            "method": payment.method,
+            "payment_date": str(payment.payment_date),
+            "transaction_code": payment.transaction_code,
+        }
+    }
 
 @router.get("/", response_model=list[schemas.PaymentOut])
 def list_payments(db: Session = Depends(get_db),

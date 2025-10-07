@@ -108,6 +108,17 @@ const Dashboard = () => {
   const formatCurrency = (amount) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
 
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
+
+  const totalPages = Math.ceil((history.recent_payments?.length || 0) / itemsPerPage);
+
+  const paginatedPayments = history.recent_payments?.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  ) || [];
+
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
       <div className="max-w-3xl w-full space-y-4">
@@ -145,7 +156,7 @@ const Dashboard = () => {
                   <p className="text-sm text-gray-700"><strong>Email:</strong> {profile.email || '—'}</p>
                   <p className="text-sm text-gray-700"><strong>Phone:</strong> {profile.phone || '—'}</p>
                   <p className="text-sm text-gray-700 mt-3"><strong>Available Balance:</strong></p>
-                  <div className="text-xl font-bold mt-1">{formatCurrency(profile.balance *1000)}</div>
+                  <div className="text-xl font-bold mt-1">{formatCurrency(profile.balance * 1000)}</div>
                 </div>
               </div>
 
@@ -179,24 +190,48 @@ const Dashboard = () => {
           <div>
             <h4 className="font-medium mb-2">Recent Payments</h4>
             {history.recent_payments?.length > 0 ? (
-              <ul className="space-y-2">
-                {history.recent_payments.map((it) => (
-                  <li key={it.invoice_id} className="p-3 bg-white rounded-lg border flex justify-between items-center">
-                    <div>
-                      <div className="text-sm font-semibold">Invoice #{it.invoice_id}</div>
-                      <div className="text-xs text-gray-500">{it.student_name ?? '—'} (ID: {it.student_id})</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-semibold">{formatCurrency(it.amount * 1000)}</div>
-                      <div className="text-xs text-gray-500">{it.paid_at ? new Date(it.paid_at).toLocaleString() : ''}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <ul className="space-y-2">
+                  {paginatedPayments.map((it) => (
+                    <li key={it.invoice_id} className="p-3 bg-white rounded-lg border flex justify-between items-center">
+                      <div>
+                        <div className="text-sm font-semibold">Invoice #{it.invoice_id}</div>
+                        <div className="text-xs text-gray-500">{it.student_name ?? '—'} (ID: {it.student_id})</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-semibold">{formatCurrency(it.amount * 1000)}</div>
+                        <div className="text-xs text-gray-500">{it.paid_at ? new Date(it.paid_at).toLocaleString() : ''}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+
+                {/* Pagination controls */}
+                <div className="flex justify-center items-center gap-2 mt-3">
+                  <button
+                    className="btn-secondary px-2 py-1"
+                    onClick={() => setCurrentPage(p => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Prev
+                  </button>
+                  <span className="text-sm">
+                    Page {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    className="btn-secondary px-2 py-1"
+                    onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </button>
+                </div>
+              </>
             ) : (
               <div className="text-sm text-gray-500">No transaction recently</div>
             )}
           </div>
+
         </div>
       </div>
     </div>

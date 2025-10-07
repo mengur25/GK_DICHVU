@@ -38,7 +38,6 @@ echo ""
 echo "✅ System started successfully!"
 echo "🌐 Frontend: http://localhost:3000"
 echo "🔧 Backend API: http://localhost:8000"
-echo "📚 API Docs: http://localhost:8000/docs"
 echo ""
 echo "Press Ctrl+C to stop all services"
 

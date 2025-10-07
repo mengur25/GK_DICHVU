@@ -1,6 +1,7 @@
 import React from "react";
 
 export default function PaymentHistorySection({ history = {} }) {
+  
   return (
     <div className="clean-card p-6">
       <h3 className="text-lg font-semibold mb-4">Payment History</h3>

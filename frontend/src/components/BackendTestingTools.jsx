@@ -43,13 +43,7 @@ export default function BackendTestingTools({
         >
           <User className="h-5 w-5" />  Add Enrollment
         </button>
-        <button
-          onClick={onRefreshData}
-          disabled={loading}
-          className="w-full btn-secondary flex items-center justify-center gap-3 py-3 disabled:opacity-50"
-        >
-          <Database className="h-5 w-5" /> Refresh Data
-        </button>
+
       </div>
     </div>
   );

@@ -10,8 +10,62 @@ import CoursesTable from '../components/CoursesTable';
 import InvoicesTable from '../components/InvoicesTable';
 import EnrollmentsTable from '../components/EnrollmentsTable';
 import PaymentHistorySection from '../components/PaymentHistorySection';
+import CreateModal from '../components/CreateModal';
+
+const studentFields = [
+  { name: 'email', label: 'Email' },
+  { name: 'password', label: 'Password' },
+  { name: 'full_name', label: 'Full Name' },
+  { name: 'student_code', label: 'Student Code' },
+  { name: 'department', label: 'Department' },
+  { name: 'phone', label: 'Phone' },
+];
+
+const courseFields = [
+  { name: 'course_code', label: 'Course Code' },
+  { name: 'course_name', label: 'Course Name' },
+  { name: 'credits', label: 'Credits' },
+  { name: 'tuition_fee_per_credit', label: 'Tuition Fee/Credit' },
+];
+
+const invoiceFields = [
+  { name: 'student_id', label: 'Student ID' },
+  { name: 'semester', label: 'Semester' },
+  { name: 'year', label: 'Year' },
+  { name: 'due_date', label: 'Due Date' },
+];
+
+const enrollmentFields = [
+  { name: 'student_id', label: 'Student ID' },
+  { name: 'courses', label: 'Courses (comma separated)' },
+  { name: 'semester', label: 'Semester' },
+  { name: 'year', label: 'Year' },
+  { name: 'status', label: 'Status' },
+];
 
 function AdminDashboard() {
+  const [openModal, setOpenModal] = useState(null);
+  const openStudentModal = () => setOpenModal('student');
+  const openCourseModal = () => setOpenModal('course');
+  const openInvoiceModal = () => setOpenModal('invoice');
+  const openEnrollmentModal = () => setOpenModal('enrollment');
+
+  const closeModal = () => setOpenModal(null);
+
+
+  const handleCreate = async (type, data) => {
+    try {
+      if (type === 'enrollment' && data.courses) {
+        data.courses = data.courses.split(',').map(c => c.trim());
+      }
+      const res = await axios.post(`/${type}/`, data);
+      console.log(`${type} created:`, res.data);
+      // loadUserData() nếu muốn reload dữ liệu
+    } catch (err) {
+      console.error(`Create ${type} Error:`, err);
+    }
+  };
+
   const navigate = useNavigate();
   const { logout } = useAuth();
 
@@ -26,22 +80,22 @@ function AdminDashboard() {
   const [currentStudent, setCurrentStudent] = useState(null);
 
   useEffect(() => {
-  const role = localStorage.getItem('role');
-if (!role) {
-  navigate('/login');
-  return;
-}
-if (role !== 'admin') {
-  navigate('/dashboard');
-  return;
-}
+    const role = localStorage.getItem('role');
+    if (!role) {
+      navigate('/login');
+      return;
+    }
+    if (role !== 'admin') {
+      navigate('/dashboard');
+      return;
+    }
 
 
-  const token = localStorage.getItem('access_token') || localStorage.getItem('token') || localStorage.getItem('authToken');
-  if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    const token = localStorage.getItem('access_token') || localStorage.getItem('token') || localStorage.getItem('authToken');
+    if (token) axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
 
-  loadUserData();
-}, [navigate]);
+    loadUserData();
+  }, [navigate]);
 
 
   const loadUserData = async () => {
@@ -68,7 +122,7 @@ if (role !== 'admin') {
   };
 
   const handleLogout = () => {
-    try { logout(); } catch (_) {}
+    try { logout(); } catch (_) { }
     localStorage.removeItem('access_token');
     localStorage.removeItem('token');
     localStorage.removeItem('authToken');
@@ -103,13 +157,14 @@ if (role !== 'admin') {
 
           <div className="clean-card p-6">
             <BackendTestingTools
-              onAddStudent={testAddStudent}
-              onAddCourse={testAddCourse}
-              onAddInvoice={testAddInvoice}
-              onAddEnrollment={testAddEnrollment}
+              onAddStudent={openStudentModal}
+              onAddCourse={openCourseModal}
+              onAddInvoice={openInvoiceModal}
+              onAddEnrollment={openEnrollmentModal}
               onRefreshData={loadUserData}
               loading={loading}
             />
+
           </div>
         </div>
 
@@ -152,8 +207,54 @@ if (role !== 'admin') {
           </div>
         )}
       </main>
+      {openModal === 'student' && (
+        <CreateModal
+          open={openModal === 'student'} // quan trọng: prop open
+          title="Create Student"
+          fields={studentFields}
+          onClose={closeModal}
+          onSubmit={(data) => handleCreate('students', data)}
+        />
+
+      )}
+
+      {openModal === 'course' && (
+        <CreateModal
+          open={openModal === 'course'}
+          title="Create Course"
+          fields={courseFields}
+          onClose={closeModal}
+          onSubmit={(data) => handleCreate('courses', data)}
+        />
+
+      )}
+
+      {openModal === 'invoice' && (
+        <CreateModal
+          open={openModal === 'invoice'}
+          title="Create Invoice"
+          fields={invoiceFields}
+          onClose={closeModal}
+          onSubmit={(data) => handleCreate('invoices', data)}
+        />
+
+      )}
+
+      {openModal === 'enrollment' && (
+        <CreateModal
+          open={openModal === 'enrollment'}
+          title="Create Enrollment"
+          fields={enrollmentFields}
+          onClose={closeModal}
+          onSubmit={(data) => handleCreate('enrollments', data)}
+        />
+
+      )}
+
     </div>
   );
 }
 
 export default AdminDashboard;
+
+

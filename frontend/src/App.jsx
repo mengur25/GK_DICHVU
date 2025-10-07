@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import { useAuth, AuthProvider } from './contexts/AuthContext';
 import PaymentReturn from './pages/PaymentReturn';
 import AdminDashboard from './pages/AdminDashboard';
+import VNPayReturn from './components/VNPayReturn';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -21,6 +22,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
+            <Route path="/vnpay-return" element={<VNPayReturn />} />
             <Route path="/admin-dashboard" element={<AdminDashboard />} />
             <Route path="/payment-return" element={<PaymentReturn />} />
             <Route path="/" element={<Navigate to="/login" replace />} />

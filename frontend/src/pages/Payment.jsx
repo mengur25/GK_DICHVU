@@ -206,13 +206,18 @@ function Payment() {
   };
 
   const isFormValid = () => {
-    return (selectedInvoiceId &&
+    const baseValid = selectedInvoiceId &&
       tuitionInfo.studentCode &&
       tuitionInfo.studentName &&
       tuitionInfo.amount > 0 &&
-      paymentInfo.method
-      && paymentInfo.agreeTerms
-    )
+      paymentInfo.method &&
+      paymentInfo.agreeTerms;
+
+    if (paymentInfo.method === 'service_account' && insufficientBalance) return false;
+
+    return baseValid;
+
+
   };
 
   const handleSubmit = async (e) => {
@@ -225,6 +230,7 @@ function Payment() {
     try {
       setLoading(true);
       setError('');
+      setOtp(''); 
 
       await axios.post('/payments/request', {
         invoice_id: selectedInvoiceId,
@@ -236,8 +242,8 @@ function Payment() {
       });
 
       setStep(2); // chuyển sang màn hình OTP
-      setOtpExpiry(new Date(Date.now() + 2 * 60 * 1000)); // 5 phút
-      setSuccess('OTP đã được gửi đến email, vui lòng kiểm tra');
+      setOtpExpiry(new Date(Date.now() + 2 * 60 * 1000));
+      setSuccess('OTP sent');
       setError('');
     } catch (err) {
       console.error('Send OTP error:', err);
@@ -250,6 +256,7 @@ function Payment() {
 
   const handleOTPSubmit = async (e) => {
     e.preventDefault();
+
     if (!otp) {
       setError('Please enter OTP');
       return;
@@ -258,8 +265,10 @@ function Payment() {
     try {
       setLoading(true);
       setError('');
+      setOtp(''); 
 
-      await axios.post('/payments/confirm',
+      const confirmResponse = await axios.post(
+        '/payments/confirm',
         {
           invoice_id: selectedInvoiceId,
           student_code: tuitionInfo.studentCode,
@@ -271,23 +280,26 @@ function Payment() {
         { params: { otp } }
       );
 
-      if (paymentInfo.method === 'service_account') {
+      if (confirmResponse.data.success && paymentInfo.method === 'service_account') {
         setStep(3);
         return;
       }
 
+      if (confirmResponse.data.success && paymentInfo.method === 'bank_transfer') {
+        const res = await axios.post('/vnpay/create', {
+          invoice_id: selectedInvoiceId,
+          amount: tuitionInfo.amount,
+          return_url: `${window.location.origin}/vnpay-return`
+        });
 
-      const res = await axios.post('/vnpay/create', {
-        invoice_id: selectedInvoiceId,
-        amount: tuitionInfo.amount,
-        return_url: `${window.location.origin}/vnpay-return`
-      });
-
-      const { paymentUrl } = res.data;
-      if (paymentUrl) {
-        window.location.href = paymentUrl;
+        const { paymentUrl } = res.data;
+        if (paymentUrl) {
+          window.location.href = paymentUrl;
+        } else {
+          setError('Cannot get payment URL');
+        }
       } else {
-        setError('Can not get link');
+        setError('OTP verification failed');
       }
     } catch (err) {
       console.error('OTP verify / confirm error:', err);
@@ -302,6 +314,7 @@ function Payment() {
     try {
       setLoading(true);
       setError('');
+      setOtp('');
 
       await axios.post('/payments/resend', null, { params: { invoice_id: selectedInvoiceId } });
       setOtpExpiry(new Date(Date.now() + 2 * 60));
@@ -317,6 +330,9 @@ function Payment() {
 
   const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount || 0);
   const formatTime = (date) => date ? date.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '';
+
+  const insufficientBalance = paymentInfo.method === 'service_account' &&
+    (paymentInfo.availableBalance ?? payerInfo.service_account?.balance ?? payerInfo.balance) < paymentInfo.tuitionAmount;
 
   if (step === 3) {
     return (
@@ -423,7 +439,13 @@ function Payment() {
                       <div className="balance-display">
                         {formatCurrency((paymentInfo.availableBalance ?? payerInfo.service_account?.balance ?? payerInfo.balance) * 1000)}
                       </div>
+                      {insufficientBalance && (
+                        <div className="text-red-600 text-sm mt-1">
+                          Insufficient balance in service account
+                        </div>
+                      )}
                     </div>
+
                     <div className="p-6 bg-gray-50 rounded-lg border border-gray-200">
                       <label className="block text-sm font-medium text-gray-700 mb-2">Tuition Amount</label>
                       <div className="payment-amount">{formatCurrency(tuitionInfo.amount * 1000)}</div>

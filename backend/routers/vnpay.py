@@ -1,10 +1,13 @@
+from sqlite3 import IntegrityError
 from fastapi import APIRouter, Request, HTTPException, Depends
 from pydantic import BaseModel
 import hmac, hashlib, time, urllib.parse
 from sqlalchemy.orm import Session
-from ..deps import get_db
+from ..deps import get_db, get_current_user
 from .. import setting, models
-
+from ..utils import send_email
+from datetime import date, datetime
+from ..models import RoleEnum, InvoiceStatus, PaymentMethod
 router = APIRouter(prefix="/vnpay", tags=["Payments"])
 
 class VnPayCreateIn(BaseModel):
@@ -52,57 +55,122 @@ def create_vnpay_payment(data: VnPayCreateIn, db: Session = Depends(get_db)):
 
     return {"paymentUrl": payment_url, "txnRef": txn_ref}
 
-@router.get("/verify")
-async def verify_vnpay_return(request: Request, db: Session = Depends(get_db)):
-    params = dict(request.query_params)
 
-    # Lấy secure hash và bỏ ra khỏi params
+@router.get("/verify")
+async def verify_vnpay_return(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    params = dict(request.query_params)
     vnp_secure_hash = params.pop("vnp_SecureHash", None)
     params.pop("vnp_SecureHashType", None)
 
     SECRET = setting.VNPAY_HASH_SECRET
     if not vnp_secure_hash:
-        return {"success": False, "message": "Missing secure hash"}
+        raise HTTPException(status_code=400, detail="Missing secure hash")
 
-    # Sắp xếp params và tạo chuỗi hash đúng cách
     sorted_items = sorted(params.items())
     hash_data = "&".join(f"{k}={urllib.parse.quote_plus(v)}" for k, v in sorted_items)
     expected_hash = hmac.new(SECRET.encode(), hash_data.encode(), hashlib.sha512).hexdigest()
 
-    # Debug nếu cần
-    print("Hash verify data:", hash_data)
-    print("Expected hash:", expected_hash)
-    print("Received hash:", vnp_secure_hash)
-
-    # So sánh chữ ký
     if expected_hash != vnp_secure_hash:
-        return {"success": False, "message": "Invalid signature"}
+        raise HTTPException(status_code=400, detail="Invalid signature")
 
-    # Lấy thông tin từ kết quả VNPay
     txn_ref = params.get("vnp_TxnRef")
     response_code = params.get("vnp_ResponseCode")
     amount_str = params.get("vnp_Amount", "0")
 
-    # Chuyển amount về VNĐ (chia cho 100)
     try:
         amount_vnd = int(amount_str) // 100
     except Exception:
-        amount_vnd = 0
+        raise HTTPException(status_code=400, detail="Invalid amount format")
 
-    # Tách invoice_id từ txn_ref
-    invoice_id = None
-    if txn_ref:
+    if not txn_ref:
+        raise HTTPException(status_code=400, detail="Missing transaction reference")
+
+    try:
+        invoice_id = int(txn_ref.split("-")[0])
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid transaction reference format")
+
+    invoice = db.query(models.Invoice).filter(models.Invoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    key = f"{invoice.student.user_id}:{invoice_id}"
+
+    student = db.query(models.Student).filter(models.Student.id == invoice.student_id).first()
+    payer_student = db.query(models.Student).filter(models.Student.user_id == current_user.id).first()
+
+
+    if response_code == "00":
+        existing_payment = db.query(models.Payment).filter(
+            models.Payment.transaction_code == txn_ref
+        ).first()
+        if existing_payment:
+            return {
+                "success": True,
+                "message": "Payment already processed",
+                "invoice_id": existing_payment.invoice_id,
+                "student_id": student.id,
+                "student_code": student.student_code if student else "",
+                "student_name": student.full_name if student else "",
+                "amount": existing_payment.amount_paid,
+                "paid_at": existing_payment.payment_date
+            }
+
+        total_paid = sum(p.amount_paid for p in invoice.payments)
+        due = invoice.total_amount - total_paid
+        pay_amount = min(amount_vnd, due)
+
+
+        payment = models.Payment(
+            invoice_id=invoice.id,
+            payer_student_id=payer_student.id,
+            amount_paid=pay_amount,
+            method=PaymentMethod.bank_transfer,
+            payment_date=date.today(),
+            transaction_code=txn_ref,
+        )
+        db.add(payment)
+
         try:
-            invoice_id = int(txn_ref.split("-")[0])
-        except Exception:
-            invoice_id = None
+            send_email(invoice.student.user.email, "Invoice Paid",
+                       f"Your invoice has been paid via VNPay. Amount: {invoice.total_amount}")
+        except:
+            pass
 
+        if pay_amount >= due:
+            invoice.status = InvoiceStatus.paid
+            invoice.paid_at = datetime.now()
 
+        db.commit()
+
+        # Trả về thông tin thanh toán mới, bao gồm student_code và student_name
         return {
             "success": True,
-            "message": "Payment success",
-            "invoice_id": invoice_id,
-            "amount": amount_vnd
+            "message": "Payment successful",
+            "invoice_id": invoice.id,
+            "student_id": student.id,
+            "student_code": student.student_code if student else "",
+            "student_name": student.full_name if student else "",
+            "amount": pay_amount,
+            "paid_at": payment.payment_date
         }
 
-    return {"success": False, "message": f"Payment failed, code={response_code}"}
+    else:
+        # Log failed transaction without creating a Payment record
+        transaction = models.Payment(
+            invoice_id=invoice_id,
+            amount=amount_vnd / 1000,
+            txn_ref=txn_ref,
+            payment_method=PaymentMethod.bank_transfer,
+            status="failed",
+            response_code=response_code,
+            created_at=time.strftime("%Y-%m-%d %H:%M:%S")
+        )
+        db.add(transaction)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Transaction failed")
+
+        raise HTTPException(status_code=400, detail=f"Payment failed, code={response_code}")
